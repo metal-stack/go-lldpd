@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@master
+      - name: Lint
+        uses: actions-contrib/golangci-lint@master
       - name: Build project # This would actually build your project, using zip for an example artifact
         run: |
           make
