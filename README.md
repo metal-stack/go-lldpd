@@ -1,6 +1,6 @@
 # go-lldpd
 
-go-lldpd is a lldpd written in go which sends machineUUID and installation timestamp of a bare metal server to connected switches.
+go-lldpd is a lldpd server written in go which sends machineUUID and installation timestamp of a bare metal server to connected switches.
 It is configured from a yaml file `/etc/metal/install.yaml`:
 
 ```yaml
