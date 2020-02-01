@@ -1,0 +1,11 @@
+[Unit]
+Description=LLDP daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/lldpd
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
