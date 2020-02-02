@@ -1,4 +1,5 @@
 bin
+rel
 .idea
 .vscode
 *.tgz
