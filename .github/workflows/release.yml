@@ -19,7 +19,7 @@ jobs:
           make release
       - name: Set up Go 1.13
         uses: actions/setup-go@v1.1.2
-          with:
+        with:
           go-version: '1.13.x'
       - name: Create Release
         id: create_release
