@@ -40,7 +40,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/metal-stack/go-lldpd/pkg/lldp"
-	"github.com/metal-pod/v"
+	"github.com/metal-stack/v"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
