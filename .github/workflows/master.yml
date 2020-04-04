@@ -18,10 +18,10 @@ jobs:
         uses: actions-contrib/golangci-lint@master
         with:
           args: run
-      - name: Set up Go 1.13
+      - name: Set up Go 1.14
         uses: actions/setup-go@v1.1.2
         with:
-          go-version: '1.13.x'
+          go-version: '1.14.x'
       - name: Build project # This would actually build your project, using zip for an example artifact
         run: |
           make

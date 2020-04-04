@@ -1,6 +1,6 @@
 module github.com/metal-stack/go-lldpd
 
-go 1.13
+go 1.14
 
 require (
 	github.com/go-stack/stack v1.8.0 // indirect
@@ -14,8 +14,8 @@ require (
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/vishvananda/netlink v1.1.0
-	golang.org/x/net v0.0.0-20200301022130-244492dfa37a // indirect
-	golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527
+	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
+	golang.org/x/sys v0.0.0-20200331124033-c3d80250170d
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.2.8
 )
