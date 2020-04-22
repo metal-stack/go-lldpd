@@ -1,5 +1,5 @@
 [Unit]
-Description=Metal-Stack LLDP daemon
+Description=metal-stack LLDP daemon
 After=network.target
 
 [Service]
