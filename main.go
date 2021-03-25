@@ -95,7 +95,7 @@ func main() {
 
 	desc := fmt.Sprintf("provisioned since %s", i.Timestamp)
 	for _, iface := range interfaces {
-		lldpd, err := lldp.NewDaemon(i.MachineUUID, desc, iface, 120*time.Second)
+		lldpd, err := lldp.NewDaemon(i.MachineUUID, desc, iface, 10*time.Second)
 		if err != nil {
 			log.Error("could not start lldp for interface", "interface", iface)
 			os.Exit(-1)
