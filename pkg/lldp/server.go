@@ -55,7 +55,7 @@ type Daemon struct {
 	SystemName        string
 	SystemDescription string
 	Interface         *net.Interface
-	PacketConn        net.PacketConn
+	PacketConn        packetConn
 	Interval          time.Duration
 	LLDPMessage       []byte
 }
@@ -69,7 +69,8 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		return nil, errors.Wrapf(err, "lldpd failed to find interface %q", interfaceName)
 	}
 
-	c, err := raw.ListenPacket(ifi, etherType, nil)
+	// c, err := raw.ListenPacket(ifi, etherType, nil)
+	c, err := listenPacket(ifi, etherType)
 	if err != nil {
 		return nil, errors.Wrap(err, "lldpd failed to listen")
 	}
@@ -81,7 +82,7 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		SystemDescription: systemDescription,
 		Interface:         ifi,
 		Interval:          interval,
-		PacketConn:        c,
+		PacketConn:        *c,
 	}
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
