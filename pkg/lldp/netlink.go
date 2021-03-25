@@ -37,11 +37,9 @@ func (p *packetConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	//   sll_halen, sll_ifindex, and sll_protocol. The other fields should
 	//   be 0.
 	// In this case, sll_family is taken care of automatically by unix.
-	err := p.s.Sendto(b, 0, &unix.SockaddrLinklayer{
-		Ifindex:  p.ifi.Index,
-		Halen:    uint8(len(a.HardwareAddr)),
-		Addr:     baddr,
-		Protocol: p.pbe,
+	err := p.s.Sendto(b, 0, &unix.SockaddrNetlink{
+		Pid:    0,
+		Family: unix.AF_NETLINK,
 	})
 	return len(b), err
 }
@@ -105,13 +103,10 @@ func htons(i uint16) uint16 {
 // data at the device driver level.
 func listenPacket(ifi *net.Interface, proto uint16) (*packetConn, error) {
 	filename := "eth-packet-socket"
-	// Enabling overriding the socket type via config.
-	typ := unix.SOCK_RAW
-
 	// Open a packet socket using specified socket type. Do not specify
 	// a protocol to avoid capturing packets which to not match cfg.Filter.
 	// The later call to bind() will set up the correct protocol for us.
-	sock, err := unix.Socket(unix.AF_NETLINK, typ, syscall.NETLINK_ROUTE)
+	sock, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW, syscall.NETLINK_ROUTE)
 	if err != nil {
 		return nil, err
 	}
