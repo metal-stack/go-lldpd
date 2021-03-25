@@ -114,26 +114,26 @@ func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 			ID:      []byte(lldpd.Interface.HardwareAddr),
 		},
 		PortID: &lldp.PortID{
-			Subtype: lldp.PortIDSubtypeInterfaceName,
-			ID:      []byte(lldpd.Interface.Name),
+			Subtype: lldp.PortIDSubtypeMACAddress,
+			ID:      []byte(lldpd.Interface.HardwareAddr),
 		},
 		TTL: 2 * lldpd.Interval,
 		Optional: []*lldp.TLV{
-			{
-				Type:   lldp.TLVTypePortDescription,
-				Value:  []byte(lldpd.Interface.Name),
-				Length: uint16(len(lldpd.Interface.Name)),
-			},
-			{
-				Type:   lldp.TLVTypeSystemName,
-				Value:  []byte(lldpd.SystemName),
-				Length: uint16(len(lldpd.SystemName)),
-			},
-			{
-				Type:   lldp.TLVTypeSystemDescription,
-				Value:  []byte(lldpd.SystemDescription),
-				Length: uint16(len(lldpd.SystemDescription)),
-			},
+			// {
+			// 	Type:   lldp.TLVTypePortDescription,
+			// 	Value:  []byte(lldpd.Interface.Name),
+			// 	Length: uint16(len(lldpd.Interface.Name)),
+			// },
+			// {
+			// 	Type:   lldp.TLVTypeSystemName,
+			// 	Value:  []byte(lldpd.SystemName),
+			// 	Length: uint16(len(lldpd.SystemName)),
+			// },
+			// {
+			// 	Type:   lldp.TLVTypeSystemDescription,
+			// 	Value:  []byte(lldpd.SystemDescription),
+			// 	Length: uint16(len(lldpd.SystemDescription)),
+			// },
 			{
 				Type:   lldp.TLVTypeOrganizationSpecific,
 				Value:  []byte(etsData),
