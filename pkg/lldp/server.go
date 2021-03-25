@@ -26,6 +26,7 @@ SOFTWARE.
 package lldp
 
 import (
+	"encoding/hex"
 	"net"
 	"time"
 
@@ -97,6 +98,16 @@ func (l *Daemon) Start() {
 }
 
 func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
+	plv := "0080c20b8800"
+	ets := "0080c209800000000000000000000000000000000000000000"
+	plvData, err := hex.DecodeString(plv)
+	if err != nil {
+		return nil, err
+	}
+	etsData, err := hex.DecodeString(ets)
+	if err != nil {
+		return nil, err
+	}
 	lf := lldp.Frame{
 		ChassisID: &lldp.ChassisID{
 			Subtype: lldp.ChassisIDSubtypeMACAddress,
@@ -122,6 +133,16 @@ func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 				Type:   lldp.TLVTypeSystemDescription,
 				Value:  []byte(lldpd.SystemDescription),
 				Length: uint16(len(lldpd.SystemDescription)),
+			},
+			{
+				Type:   lldp.TLVTypeOrganizationSpecific,
+				Value:  []byte(etsData),
+				Length: uint16(len(etsData)),
+			},
+			{
+				Type:   lldp.TLVTypeOrganizationSpecific,
+				Value:  []byte(plvData),
+				Length: uint16(len(plvData)),
 			},
 		},
 	}
