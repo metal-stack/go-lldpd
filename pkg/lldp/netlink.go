@@ -157,13 +157,13 @@ func newPacketConn(ifi *net.Interface, s socket, pbe uint16, filter []bpf.RawIns
 	//   Only the sll_protocol and the sll_ifindex address fields are used for
 	//   purposes of binding.
 	// This overrides the protocol given to socket(AF_PACKET).
-	err := s.Bind(&unix.SockaddrLinklayer{
-		Protocol: pc.pbe,
-		Ifindex:  ifi.Index,
-	})
-	if err != nil {
-		return nil, err
-	}
+	// err := s.Bind(&unix.SockaddrLinklayer{
+	// 	Protocol: pc.pbe,
+	// 	Ifindex:  ifi.Index,
+	// })
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	return pc, nil
 }
