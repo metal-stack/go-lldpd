@@ -35,6 +35,7 @@ import (
 
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
+	"github.com/mdlayher/netlink"
 )
 
 const (
@@ -54,7 +55,7 @@ type Daemon struct {
 	SystemName        string
 	SystemDescription string
 	Interface         *net.Interface
-	NetlinkConn       netlinkCon
+	NetlinkConn       *netlink.Conn
 	Interval          time.Duration
 	LLDPMessage       []byte
 }
@@ -81,7 +82,7 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		SystemDescription: systemDescription,
 		Interface:         ifi,
 		Interval:          interval,
-		NetlinkConn:       *c,
+		NetlinkConn:       c,
 	}
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
@@ -119,21 +120,21 @@ func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 		},
 		TTL: 2 * lldpd.Interval,
 		Optional: []*lldp.TLV{
-			// {
-			// 	Type:   lldp.TLVTypePortDescription,
-			// 	Value:  []byte(lldpd.Interface.Name),
-			// 	Length: uint16(len(lldpd.Interface.Name)),
-			// },
-			// {
-			// 	Type:   lldp.TLVTypeSystemName,
-			// 	Value:  []byte(lldpd.SystemName),
-			// 	Length: uint16(len(lldpd.SystemName)),
-			// },
-			// {
-			// 	Type:   lldp.TLVTypeSystemDescription,
-			// 	Value:  []byte(lldpd.SystemDescription),
-			// 	Length: uint16(len(lldpd.SystemDescription)),
-			// },
+			{
+				Type:   lldp.TLVTypePortDescription,
+				Value:  []byte(lldpd.Interface.Name),
+				Length: uint16(len(lldpd.Interface.Name)),
+			},
+			{
+				Type:   lldp.TLVTypeSystemName,
+				Value:  []byte(lldpd.SystemName),
+				Length: uint16(len(lldpd.SystemName)),
+			},
+			{
+				Type:   lldp.TLVTypeSystemDescription,
+				Value:  []byte(lldpd.SystemDescription),
+				Length: uint16(len(lldpd.SystemDescription)),
+			},
 			{
 				Type:   lldp.TLVTypeOrganizationSpecific,
 				Value:  []byte(etsData),
@@ -168,7 +169,8 @@ func (l *Daemon) sendMessages() {
 	// Send message forever.
 	t := time.NewTicker(l.Interval)
 	for range t.C {
-		if err := l.NetlinkConn.sendTo(b); err != nil {
+		msg := messageBytes(b)
+		if _, err := l.NetlinkConn.Send(msg); err != nil {
 			log.Error("lldpd", "failed to send message", err)
 		}
 	}
