@@ -35,7 +35,6 @@ import (
 
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
-	"github.com/mdlayher/raw"
 )
 
 const (
@@ -55,7 +54,7 @@ type Daemon struct {
 	SystemName        string
 	SystemDescription string
 	Interface         *net.Interface
-	PacketConn        packetConn
+	NetlinkConn       netlinkCon
 	Interval          time.Duration
 	LLDPMessage       []byte
 }
@@ -70,7 +69,7 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 	}
 
 	// c, err := raw.ListenPacket(ifi, etherType, nil)
-	c, err := listenPacket(ifi, etherType)
+	c, err := netlinkSocket(etherType)
 	if err != nil {
 		return nil, errors.Wrap(err, "lldpd failed to listen")
 	}
@@ -82,7 +81,7 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		SystemDescription: systemDescription,
 		Interface:         ifi,
 		Interval:          interval,
-		PacketConn:        *c,
+		NetlinkConn:       *c,
 	}
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
@@ -166,16 +165,10 @@ func (l *Daemon) sendMessages() {
 		log.Error("lldpd", "failed to marshal ethernet frame", err)
 	}
 
-	// Required by Linux, even though the Ethernet frame has a destination.
-	// Unused by BSD.
-	addr := &raw.Addr{
-		HardwareAddr: ethernet.Broadcast,
-	}
-
 	// Send message forever.
 	t := time.NewTicker(l.Interval)
 	for range t.C {
-		if _, err := l.PacketConn.WriteTo(b, addr); err != nil {
+		if err := l.NetlinkConn.sendTo(b); err != nil {
 			log.Error("lldpd", "failed to send message", err)
 		}
 	}
