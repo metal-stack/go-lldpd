@@ -196,10 +196,10 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 		return fmt.Errorf("error binding to socket:%w", err)
 	}
 
-	err = syscall.SetLsfPromisc(l.Interface.Name, true)
-	if err != nil {
-		return fmt.Errorf("error setting interface to promisc mode:%w", err)
-	}
+	// err = syscall.SetLsfPromisc(l.Interface.Name, true)
+	// if err != nil {
+	// 	return fmt.Errorf("error setting interface to promisc mode:%w", err)
+	// }
 
 	n, err := syscall.Write(fd, pkt)
 	if err != nil {
@@ -208,9 +208,9 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 		log.Info("packet sent", "len", n)
 	}
 
-	err = syscall.SetLsfPromisc(l.Interface.Name, false)
-	if err != nil {
-		return fmt.Errorf("unable to disable promisc mode:%w", err)
-	}
+	// err = syscall.SetLsfPromisc(l.Interface.Name, false)
+	// if err != nil {
+	// 	return fmt.Errorf("unable to disable promisc mode:%w", err)
+	// }
 	return nil
 }
