@@ -61,6 +61,7 @@ type Daemon struct {
 	Interface         *net.Interface
 	Interval          time.Duration
 	LLDPMessage       []byte
+	socket            int
 }
 
 // NewDaemon create a new LLDPD instance for the given interface
@@ -80,6 +81,11 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		Interface:         ifi,
 		Interval:          interval,
 	}
+	err = l.bindTo(ethernet.Broadcast)
+	if err != nil {
+		return nil, errors.Wrap(err, "lldpd failed to bind to socket")
+	}
+
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
 		return nil, errors.Wrap(err, "lldpd failed to create lldp message")
@@ -145,7 +151,7 @@ func (l *Daemon) sendMessages() {
 	// Send message forever.
 	t := time.NewTicker(l.Interval)
 	for range t.C {
-		if err := l.writeTo(b, ethernet.Broadcast); err != nil {
+		if err := l.writeTo(b); err != nil {
 			log.Error("lldpd", "failed to send message", err)
 		}
 	}
@@ -158,7 +164,7 @@ func htons(i uint16) uint16 {
 	return (i<<8)&0xff00 | i>>8
 }
 
-func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
+func (l *Daemon) bindTo(address net.HardwareAddr) error {
 
 	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, syscall.ETH_P_ALL)
 	if err != nil {
@@ -183,11 +189,17 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 	if err != nil {
 		return fmt.Errorf("error binding to socket:%w", err)
 	}
+	l.socket = fd
+	return nil
+}
 
-	_, err = syscall.Write(fd, pkt)
+func (l *Daemon) writeTo(pkt []byte) error {
+	if l.socket == 0 {
+		return fmt.Errorf("socket is not bound")
+	}
+	_, err := syscall.Write(l.socket, pkt)
 	if err != nil {
 		return fmt.Errorf("unable to write to socket:%w", err)
 	}
-
 	return nil
 }
