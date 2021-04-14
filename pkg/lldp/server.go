@@ -205,7 +205,7 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 	if err != nil {
 		return err
 	} else {
-		log.Info("packet sent len:%d", n)
+		log.Info("packet sent", "len", n)
 	}
 
 	err = syscall.SetLsfPromisc(l.Interface.Name, false)
