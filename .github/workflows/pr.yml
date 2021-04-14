@@ -1,0 +1,27 @@
+name: master
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  build:
+ 
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+      - name: Lint
+        uses: actions-contrib/golangci-lint@master
+        with:
+          args: run -p bugs
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.16.x'
+      - name: Build project # This would actually build your project, using zip for an example artifact
+        run: |
+          make
