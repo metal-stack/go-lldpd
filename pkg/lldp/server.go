@@ -56,11 +56,11 @@ var (
 
 // Daemon is a lldp daemon
 type Daemon struct {
-	SystemName        string
-	SystemDescription string
-	Interface         *net.Interface
-	Interval          time.Duration
-	LLDPMessage       []byte
+	systemName        string
+	systemDescription string
+	ifi               *net.Interface
+	interval          time.Duration
+	lldpMessage       []byte
 	socket            int
 }
 
@@ -76,10 +76,10 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 	log.Info("lldpd", "listen on", ifi.Name)
 
 	l := &Daemon{
-		SystemName:        systemName,
-		SystemDescription: systemDescription,
-		Interface:         ifi,
-		Interval:          interval,
+		systemName:        systemName,
+		systemDescription: systemDescription,
+		ifi:               ifi,
+		interval:          interval,
 	}
 	err = l.bindTo(ethernet.Broadcast)
 	if err != nil {
@@ -90,42 +90,43 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 	if err != nil {
 		return nil, errors.Wrap(err, "lldpd failed to create lldp message")
 	}
-	l.LLDPMessage = lldp
+	l.lldpMessage = lldp
 	return l, nil
 }
 
 // Start spawn a goroutine which sends LLDP PDU's every interval given.
 func (l *Daemon) Start() {
 	go l.sendMessages()
-	log.Info("lldpd", "interface", l.Interface.Name, "interval", l.Interval)
+	log.Info("lldpd", "interface", l.ifi.Name, "interval", l.interval)
 }
 
+// create LLDPMessage as byte array
 func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 	lf := lldp.Frame{
 		ChassisID: &lldp.ChassisID{
 			Subtype: lldp.ChassisIDSubtypeMACAddress,
-			ID:      []byte(lldpd.Interface.HardwareAddr),
+			ID:      []byte(lldpd.ifi.HardwareAddr),
 		},
 		PortID: &lldp.PortID{
 			Subtype: lldp.PortIDSubtypeInterfaceName,
-			ID:      []byte(lldpd.Interface.Name),
+			ID:      []byte(lldpd.ifi.Name),
 		},
-		TTL: 2 * lldpd.Interval,
+		TTL: 2 * lldpd.interval,
 		Optional: []*lldp.TLV{
 			{
 				Type:   lldp.TLVTypePortDescription,
-				Value:  []byte(lldpd.Interface.Name),
-				Length: uint16(len(lldpd.Interface.Name)),
+				Value:  []byte(lldpd.ifi.Name),
+				Length: uint16(len(lldpd.ifi.Name)),
 			},
 			{
 				Type:   lldp.TLVTypeSystemName,
-				Value:  []byte(lldpd.SystemName),
-				Length: uint16(len(lldpd.SystemName)),
+				Value:  []byte(lldpd.systemName),
+				Length: uint16(len(lldpd.systemName)),
 			},
 			{
 				Type:   lldp.TLVTypeSystemDescription,
-				Value:  []byte(lldpd.SystemDescription),
-				Length: uint16(len(lldpd.SystemDescription)),
+				Value:  []byte(lldpd.systemDescription),
+				Length: uint16(len(lldpd.systemDescription)),
 			},
 		},
 	}
@@ -138,9 +139,9 @@ func (l *Daemon) sendMessages() {
 	// Message is LLDP destination.
 	f := &ethernet.Frame{
 		Destination: destinationMac,
-		Source:      l.Interface.HardwareAddr,
+		Source:      l.ifi.HardwareAddr,
 		EtherType:   etherType,
-		Payload:     l.LLDPMessage,
+		Payload:     l.lldpMessage,
 	}
 
 	b, err := f.MarshalBinary()
@@ -149,7 +150,7 @@ func (l *Daemon) sendMessages() {
 	}
 
 	// Send message forever.
-	t := time.NewTicker(l.Interval)
+	t := time.NewTicker(l.interval)
 	for range t.C {
 		if err := l.writeTo(b); err != nil {
 			log.Error("lldpd", "failed to send message", err)
@@ -164,8 +165,8 @@ func htons(i uint16) uint16 {
 	return (i<<8)&0xff00 | i>>8
 }
 
+// bindTo the specified address an store the raw socket with appropriate priority in the daemon.
 func (l *Daemon) bindTo(address net.HardwareAddr) error {
-
 	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, syscall.ETH_P_ALL)
 	if err != nil {
 		return fmt.Errorf("error creating raw packet socket:%w", err)
@@ -180,7 +181,7 @@ func (l *Daemon) bindTo(address net.HardwareAddr) error {
 	copy(baddr[:], address)
 	addr := syscall.SockaddrLinklayer{
 		Protocol: htons(etherType),
-		Ifindex:  l.Interface.Index,
+		Ifindex:  l.ifi.Index,
 		Halen:    uint8(len(address)),
 		Addr:     baddr,
 	}
@@ -193,6 +194,7 @@ func (l *Daemon) bindTo(address net.HardwareAddr) error {
 	return nil
 }
 
+// writeTo the given byte array to the socket
 func (l *Daemon) writeTo(pkt []byte) error {
 	if l.socket == 0 {
 		return fmt.Errorf("socket is not bound")
