@@ -26,7 +26,9 @@ SOFTWARE.
 package lldp
 
 import (
+	"fmt"
 	"net"
+	"syscall"
 	"time"
 
 	log "github.com/inconshreveable/log15"
@@ -146,15 +148,62 @@ func (l *Daemon) sendMessages() {
 
 	// Required by Linux, even though the Ethernet frame has a destination.
 	// Unused by BSD.
-	addr := &raw.Addr{
-		HardwareAddr: ethernet.Broadcast,
-	}
+	// addr := &raw.Addr{
+	// 	HardwareAddr: ethernet.Broadcast,
+	// }
 
 	// Send message forever.
 	t := time.NewTicker(l.Interval)
 	for range t.C {
-		if _, err := l.PacketConn.WriteTo(b, addr); err != nil {
+		if err := l.writeTo(b, ethernet.Broadcast); err != nil {
 			log.Error("lldpd", "failed to send message", err)
 		}
 	}
+}
+
+const TC_PRIO_CONTROL = 7
+
+func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
+
+	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, syscall.ETH_P_ALL)
+	if err != nil {
+		return fmt.Errorf("error creating raw packet socket:%w", err)
+
+	}
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_PRIORITY, TC_PRIO_CONTROL)
+	if err != nil {
+		return fmt.Errorf("error in setting priority option on socket:%w", err)
+	}
+
+	var haddr [8]byte
+	copy(haddr[0:7], address[0:7])
+	addr := syscall.SockaddrLinklayer{
+		Protocol: syscall.ETH_P_IP,
+		Ifindex:  l.Interface.Index,
+		Halen:    uint8(len(address)),
+		Addr:     haddr,
+	}
+
+	err = syscall.Bind(fd, &addr)
+	if err != nil {
+		return fmt.Errorf("error binding to socket:%w", err)
+	}
+
+	err = syscall.SetLsfPromisc(l.Interface.Name, true)
+	if err != nil {
+		return fmt.Errorf("error setting interface to promisc mode:%w", err)
+	}
+
+	n, err := syscall.Write(fd, pkt)
+	if err != nil {
+		return err
+	} else {
+		log.Info("packet sent len:%d", n)
+	}
+
+	err = syscall.SetLsfPromisc(l.Interface.Name, false)
+	if err != nil {
+		return fmt.Errorf("unable to disable promisc mode:%w", err)
+	}
+	return nil
 }
