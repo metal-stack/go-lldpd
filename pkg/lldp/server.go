@@ -142,12 +142,6 @@ func (l *Daemon) sendMessages() {
 		log.Error("lldpd", "failed to marshal ethernet frame", err)
 	}
 
-	// Required by Linux, even though the Ethernet frame has a destination.
-	// Unused by BSD.
-	// addr := &raw.Addr{
-	// 	HardwareAddr: ethernet.Broadcast,
-	// }
-
 	// Send message forever.
 	t := time.NewTicker(l.Interval)
 	for range t.C {
@@ -190,11 +184,9 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 		return fmt.Errorf("error binding to socket:%w", err)
 	}
 
-	n, err := syscall.Write(fd, pkt)
+	_, err = syscall.Write(fd, pkt)
 	if err != nil {
 		return fmt.Errorf("unable to write to socket:%w", err)
-	} else {
-		log.Debug("packet sent", "len", n)
 	}
 
 	return nil
