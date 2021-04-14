@@ -36,13 +36,16 @@ import (
 
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
-	"github.com/mdlayher/raw"
 )
 
 const (
 	// Make use of an LLDP EtherType.
 	// https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 	etherType = 0x88cc
+
+	// TC_PRIO_CONTROL is required to be set as socket option,
+	// otherwise newer intel nics will not forward packets from this socket
+	TC_PRIO_CONTROL = 7
 )
 
 var (
@@ -56,7 +59,6 @@ type Daemon struct {
 	SystemName        string
 	SystemDescription string
 	Interface         *net.Interface
-	PacketConn        net.PacketConn
 	Interval          time.Duration
 	LLDPMessage       []byte
 }
@@ -70,11 +72,6 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		return nil, errors.Wrapf(err, "lldpd failed to find interface %q", interfaceName)
 	}
 
-	c, err := raw.ListenPacket(ifi, etherType, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "lldpd failed to listen")
-	}
-
 	log.Info("lldpd", "listen on", ifi.Name)
 
 	l := &Daemon{
@@ -82,7 +79,6 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		SystemDescription: systemDescription,
 		Interface:         ifi,
 		Interval:          interval,
-		PacketConn:        c,
 	}
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
@@ -161,8 +157,6 @@ func (l *Daemon) sendMessages() {
 	}
 }
 
-const TC_PRIO_CONTROL = 7
-
 // htons converts a short (uint16) from host-to-network byte order.
 // Thanks to mikioh for this neat trick:
 // https://github.com/mikioh/-stdyng/blob/master/afpacket.go
@@ -196,21 +190,12 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 		return fmt.Errorf("error binding to socket:%w", err)
 	}
 
-	// err = syscall.SetLsfPromisc(l.Interface.Name, true)
-	// if err != nil {
-	// 	return fmt.Errorf("error setting interface to promisc mode:%w", err)
-	// }
-
 	n, err := syscall.Write(fd, pkt)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to write to socket:%w", err)
 	} else {
-		log.Info("packet sent", "len", n)
+		log.Debug("packet sent", "len", n)
 	}
 
-	// err = syscall.SetLsfPromisc(l.Interface.Name, false)
-	// if err != nil {
-	// 	return fmt.Errorf("unable to disable promisc mode:%w", err)
-	// }
 	return nil
 }

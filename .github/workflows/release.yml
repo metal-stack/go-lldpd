@@ -14,10 +14,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@master
-      - name: Set up Go 1.15
+      - name: Set up Go 1.16
         uses: actions/setup-go@v2
         with:
-          go-version: '1.15.x'
+          go-version: '1.16.x'
       - name: Build project # This would actually build your project, using zip for an example artifact
         run: |
           make release
