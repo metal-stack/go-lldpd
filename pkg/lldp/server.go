@@ -163,6 +163,13 @@ func (l *Daemon) sendMessages() {
 
 const TC_PRIO_CONTROL = 7
 
+// htons converts a short (uint16) from host-to-network byte order.
+// Thanks to mikioh for this neat trick:
+// https://github.com/mikioh/-stdyng/blob/master/afpacket.go
+func htons(i uint16) uint16 {
+	return (i<<8)&0xff00 | i>>8
+}
+
 func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 
 	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, syscall.ETH_P_ALL)
@@ -175,13 +182,13 @@ func (l *Daemon) writeTo(pkt []byte, address net.HardwareAddr) error {
 		return fmt.Errorf("error in setting priority option on socket:%w", err)
 	}
 
-	var haddr [8]byte
-	copy(haddr[0:7], address[0:7])
+	var baddr [8]byte
+	copy(baddr[:], address)
 	addr := syscall.SockaddrLinklayer{
-		Protocol: syscall.ETH_P_IP,
+		Protocol: htons(etherType),
 		Ifindex:  l.Interface.Index,
 		Halen:    uint8(len(address)),
-		Addr:     haddr,
+		Addr:     baddr,
 	}
 
 	err = syscall.Bind(fd, &addr)
