@@ -45,6 +45,7 @@ const (
 
 	// TC_PRIO_CONTROL is required to be set as socket option,
 	// otherwise newer intel nics will not forward packets from this socket
+	// defined here: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/pkt_sched.h#n26
 	TC_PRIO_CONTROL = 7
 )
 
