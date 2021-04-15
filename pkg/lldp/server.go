@@ -26,7 +26,9 @@ SOFTWARE.
 package lldp
 
 import (
+	"fmt"
 	"net"
+	"syscall"
 	"time"
 
 	log "github.com/inconshreveable/log15"
@@ -34,13 +36,17 @@ import (
 
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
-	"github.com/mdlayher/raw"
 )
 
 const (
 	// Make use of an LLDP EtherType.
 	// https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
 	etherType = 0x88cc
+
+	// TC_PRIO_CONTROL is required to be set as socket option,
+	// otherwise newer intel nics will not forward packets from this socket
+	// defined here: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/pkt_sched.h#n26
+	TC_PRIO_CONTROL = 7
 )
 
 var (
@@ -51,12 +57,12 @@ var (
 
 // Daemon is a lldp daemon
 type Daemon struct {
-	SystemName        string
-	SystemDescription string
-	Interface         *net.Interface
-	PacketConn        net.PacketConn
-	Interval          time.Duration
-	LLDPMessage       []byte
+	systemName        string
+	systemDescription string
+	ifi               *net.Interface
+	interval          time.Duration
+	lldpMessage       []byte
+	socket            int
 }
 
 // NewDaemon create a new LLDPD instance for the given interface
@@ -68,60 +74,60 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		return nil, errors.Wrapf(err, "lldpd failed to find interface %q", interfaceName)
 	}
 
-	c, err := raw.ListenPacket(ifi, etherType, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "lldpd failed to listen")
-	}
-
 	log.Info("lldpd", "listen on", ifi.Name)
 
 	l := &Daemon{
-		SystemName:        systemName,
-		SystemDescription: systemDescription,
-		Interface:         ifi,
-		Interval:          interval,
-		PacketConn:        c,
+		systemName:        systemName,
+		systemDescription: systemDescription,
+		ifi:               ifi,
+		interval:          interval,
 	}
+	err = l.bindTo(ethernet.Broadcast)
+	if err != nil {
+		return nil, errors.Wrap(err, "lldpd failed to bind to socket")
+	}
+
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
 		return nil, errors.Wrap(err, "lldpd failed to create lldp message")
 	}
-	l.LLDPMessage = lldp
+	l.lldpMessage = lldp
 	return l, nil
 }
 
 // Start spawn a goroutine which sends LLDP PDU's every interval given.
 func (l *Daemon) Start() {
 	go l.sendMessages()
-	log.Info("lldpd", "interface", l.Interface.Name, "interval", l.Interval)
+	log.Info("lldpd", "interface", l.ifi.Name, "interval", l.interval)
 }
 
+// create LLDPMessage as byte array
 func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 	lf := lldp.Frame{
 		ChassisID: &lldp.ChassisID{
 			Subtype: lldp.ChassisIDSubtypeMACAddress,
-			ID:      []byte(lldpd.Interface.HardwareAddr),
+			ID:      []byte(lldpd.ifi.HardwareAddr),
 		},
 		PortID: &lldp.PortID{
 			Subtype: lldp.PortIDSubtypeInterfaceName,
-			ID:      []byte(lldpd.Interface.Name),
+			ID:      []byte(lldpd.ifi.Name),
 		},
-		TTL: 2 * lldpd.Interval,
+		TTL: 2 * lldpd.interval,
 		Optional: []*lldp.TLV{
 			{
 				Type:   lldp.TLVTypePortDescription,
-				Value:  []byte(lldpd.Interface.Name),
-				Length: uint16(len(lldpd.Interface.Name)),
+				Value:  []byte(lldpd.ifi.Name),
+				Length: uint16(len(lldpd.ifi.Name)),
 			},
 			{
 				Type:   lldp.TLVTypeSystemName,
-				Value:  []byte(lldpd.SystemName),
-				Length: uint16(len(lldpd.SystemName)),
+				Value:  []byte(lldpd.systemName),
+				Length: uint16(len(lldpd.systemName)),
 			},
 			{
 				Type:   lldp.TLVTypeSystemDescription,
-				Value:  []byte(lldpd.SystemDescription),
-				Length: uint16(len(lldpd.SystemDescription)),
+				Value:  []byte(lldpd.systemDescription),
+				Length: uint16(len(lldpd.systemDescription)),
 			},
 		},
 	}
@@ -134,9 +140,9 @@ func (l *Daemon) sendMessages() {
 	// Message is LLDP destination.
 	f := &ethernet.Frame{
 		Destination: destinationMac,
-		Source:      l.Interface.HardwareAddr,
+		Source:      l.ifi.HardwareAddr,
 		EtherType:   etherType,
-		Payload:     l.LLDPMessage,
+		Payload:     l.lldpMessage,
 	}
 
 	b, err := f.MarshalBinary()
@@ -144,17 +150,59 @@ func (l *Daemon) sendMessages() {
 		log.Error("lldpd", "failed to marshal ethernet frame", err)
 	}
 
-	// Required by Linux, even though the Ethernet frame has a destination.
-	// Unused by BSD.
-	addr := &raw.Addr{
-		HardwareAddr: ethernet.Broadcast,
-	}
-
 	// Send message forever.
-	t := time.NewTicker(l.Interval)
+	t := time.NewTicker(l.interval)
 	for range t.C {
-		if _, err := l.PacketConn.WriteTo(b, addr); err != nil {
+		if err := l.writeTo(b); err != nil {
 			log.Error("lldpd", "failed to send message", err)
 		}
 	}
+}
+
+// htons converts a short (uint16) from host-to-network byte order.
+// Thanks to mikioh for this neat trick:
+// https://github.com/mikioh/-stdyng/blob/master/afpacket.go
+func htons(i uint16) uint16 {
+	return (i<<8)&0xff00 | i>>8
+}
+
+// bindTo the specified address an store the raw socket with appropriate priority in the daemon.
+func (l *Daemon) bindTo(address net.HardwareAddr) error {
+	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, syscall.ETH_P_ALL)
+	if err != nil {
+		return fmt.Errorf("error creating raw packet socket:%w", err)
+
+	}
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_PRIORITY, TC_PRIO_CONTROL)
+	if err != nil {
+		return fmt.Errorf("error in setting priority option on socket:%w", err)
+	}
+
+	var baddr [8]byte
+	copy(baddr[:], address)
+	addr := syscall.SockaddrLinklayer{
+		Protocol: htons(etherType),
+		Ifindex:  l.ifi.Index,
+		Halen:    uint8(len(address)),
+		Addr:     baddr,
+	}
+
+	err = syscall.Bind(fd, &addr)
+	if err != nil {
+		return fmt.Errorf("error binding to socket:%w", err)
+	}
+	l.socket = fd
+	return nil
+}
+
+// writeTo the given byte array to the socket
+func (l *Daemon) writeTo(pkt []byte) error {
+	if l.socket == 0 {
+		return fmt.Errorf("socket is not bound")
+	}
+	_, err := syscall.Write(l.socket, pkt)
+	if err != nil {
+		return fmt.Errorf("unable to write to socket:%w", err)
+	}
+	return nil
 }
