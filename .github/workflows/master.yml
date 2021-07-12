@@ -17,7 +17,7 @@ jobs:
       - name: Lint
         uses: actions-contrib/golangci-lint@master
         with:
-          args: run -p bugs
+          args: run -p bugs -p unused
       - name: Set up Go 1.16
         uses: actions/setup-go@v2
         with:
