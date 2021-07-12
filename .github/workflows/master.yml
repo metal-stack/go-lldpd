@@ -15,9 +15,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@master
       - name: Lint
-        uses: actions-contrib/golangci-lint@master
+        uses: golangci/golangci-lint-action@v2
         with:
-          args: run -p bugs
+          args: -p bugs -p unused
       - name: Set up Go 1.16
         uses: actions/setup-go@v2
         with:

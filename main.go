@@ -29,7 +29,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -60,7 +59,7 @@ const (
 // Starts lldp on every ethernet nic that is up
 func main() {
 	log.Info("lldpd", "version", v.V)
-	b, err := ioutil.ReadFile(installYaml)
+	b, err := os.ReadFile(installYaml)
 	if err != nil {
 		log.Error("lldpd", "unable to open config", err)
 		os.Exit(1)
@@ -154,7 +153,7 @@ func stopFirmwareLLDP() {
 			if !info.IsDir() && info.Name() == "command" {
 				log.Info("execute echo lldp stop > ", "path", path)
 				stopCommand := []byte("lldp stop")
-				err := ioutil.WriteFile(path, stopCommand, os.ModePerm)
+				err := os.WriteFile(path, stopCommand, os.ModePerm)
 				if err != nil {
 					log.Error("stop lldp > command failed", "path", path, "error", err)
 				}

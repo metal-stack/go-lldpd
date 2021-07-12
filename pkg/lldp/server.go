@@ -32,7 +32,6 @@ import (
 	"time"
 
 	log "github.com/inconshreveable/log15"
-	"github.com/pkg/errors"
 
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
@@ -71,7 +70,7 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 	// traffic with etherecho's EtherType.
 	ifi, err := net.InterfaceByName(interfaceName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "lldpd failed to find interface %q", interfaceName)
+		return nil, fmt.Errorf("lldpd failed to find interface %q error: %w", interfaceName, err)
 	}
 
 	log.Info("lldpd", "listen on", ifi.Name)
@@ -84,12 +83,12 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 	}
 	err = l.bindTo(ethernet.Broadcast)
 	if err != nil {
-		return nil, errors.Wrap(err, "lldpd failed to bind to socket")
+		return nil, fmt.Errorf("lldpd failed to bind to socket: %w", err)
 	}
 
 	lldp, err := createLLDPMessage(l)
 	if err != nil {
-		return nil, errors.Wrap(err, "lldpd failed to create lldp message")
+		return nil, fmt.Errorf("lldpd failed to create lldp message: %w", err)
 	}
 	l.lldpMessage = lldp
 	return l, nil
