@@ -2,7 +2,7 @@
 SHA := $(shell git rev-parse --short=8 HEAD)
 GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
-VERSION := $(or ${VERSION},devel)
+VERSION := $(or ${GITHUB_TAG_NAME},$(shell git describe --tags --exact-match 2> /dev/null || git symbolic-ref -q --short HEAD || git rev-parse --short HEAD))
 
 GO111MODULE := on
 
