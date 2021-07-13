@@ -25,3 +25,7 @@ jobs:
       - name: Build project # This would actually build your project, using zip for an example artifact
         run: |
           make
+
+      - uses: release-drafter/release-drafter@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
