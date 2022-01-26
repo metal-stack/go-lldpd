@@ -14,15 +14,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@master
-      - name: Lint
-        uses: golangci/golangci-lint-action@v2
-        with:
-          args: -p bugs -p unused
+
       - name: Set up Go 1.17
         uses: actions/setup-go@v2
         with:
           go-version: '1.17.x'
-      - name: Build project # This would actually build your project, using zip for an example artifact
+
+      - name: Install libpcap-dev
+        run: sudo apt-get install -y libpcap-dev
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          args: -p bugs -p unused
+
+      - name: Build project
         run: |
           make
 
