@@ -12,8 +12,8 @@ import (
 
 // Client consumes lldp messages.
 type Client struct {
-	Source *gopacket.PacketSource
-	Handle *pcap.Handle
+	source *gopacket.PacketSource
+	handle *pcap.Handle
 }
 
 // DiscoveryResult holds optional TLV SysName and SysDescription fields of a real lldp frame.
@@ -38,34 +38,35 @@ func NewClient(iface net.Interface) (*Client, error) {
 
 	src := gopacket.NewPacketSource(handle, handle.LinkType())
 	return &Client{
-		Source: src,
-		Handle: handle,
+		source: src,
+		handle: handle,
 	}, nil
 }
 
 // Start searches on the configured interface for lldp packages and
 // pushes the optional TLV SysName and SysDescription fields of each
 // found lldp package into the given channel.
-func (l *Client) Start(discoveryResult chan<- DiscoveryResult) {
+func (l *Client) Start(resultChan chan<- DiscoveryResult) {
 	defer func() {
-		close(discoveryResult)
+		close(resultChan)
 		l.Close()
 	}()
 
 	for {
-		for packet := range l.Source.Packets() {
+		for packet := range l.source.Packets() {
 			if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
 				continue
 			}
-			dr := DiscoveryResult{}
 			for _, layer := range packet.Layers() {
 				if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
 					continue
 				}
 				info := layer.(*layers.LinkLayerDiscoveryInfo)
-				dr.SysName = info.SysName
-				dr.SysDescription = info.SysDescription
-				discoveryResult <- dr
+				dr := DiscoveryResult{
+					SysName:        info.SysName,
+					SysDescription: info.SysDescription,
+				}
+				resultChan <- dr
 			}
 		}
 	}
@@ -73,5 +74,5 @@ func (l *Client) Start(discoveryResult chan<- DiscoveryResult) {
 
 // Close the LLDP client
 func (l *Client) Close() {
-	l.Handle.Close()
+	l.handle.Close()
 }
