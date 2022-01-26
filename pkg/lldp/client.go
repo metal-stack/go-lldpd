@@ -1,6 +1,7 @@
 package lldp
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -14,6 +15,7 @@ import (
 type Client struct {
 	source *gopacket.PacketSource
 	handle *pcap.Handle
+	ctx    context.Context
 }
 
 // DiscoveryResult holds optional TLV SysName and SysDescription fields of a real lldp frame.
@@ -23,7 +25,7 @@ type DiscoveryResult struct {
 }
 
 // NewClient creates a new lldp client.
-func NewClient(iface net.Interface) (*Client, error) {
+func NewClient(ctx context.Context, iface net.Interface) (*Client, error) {
 	handle, err := pcap.OpenLive(iface.Name, 65536, true, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", iface.Name, err)
@@ -40,6 +42,7 @@ func NewClient(iface net.Interface) (*Client, error) {
 	return &Client{
 		source: src,
 		handle: handle,
+		ctx:    ctx,
 	}, nil
 }
 
@@ -53,21 +56,26 @@ func (l *Client) Start(resultChan chan<- DiscoveryResult) {
 	}()
 
 	for {
-		for packet := range l.source.Packets() {
-			if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
-				continue
-			}
-			for _, layer := range packet.Layers() {
-				if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
+		select {
+		default:
+			for packet := range l.source.Packets() {
+				if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
 					continue
 				}
-				info := layer.(*layers.LinkLayerDiscoveryInfo)
-				dr := DiscoveryResult{
-					SysName:        info.SysName,
-					SysDescription: info.SysDescription,
+				for _, layer := range packet.Layers() {
+					if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
+						continue
+					}
+					info := layer.(*layers.LinkLayerDiscoveryInfo)
+					dr := DiscoveryResult{
+						SysName:        info.SysName,
+						SysDescription: info.SysDescription,
+					}
+					resultChan <- dr
 				}
-				resultChan <- dr
 			}
+		case <-l.ctx.Done():
+			return
 		}
 	}
 }
