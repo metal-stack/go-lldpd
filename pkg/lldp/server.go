@@ -31,10 +31,9 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/inconshreveable/log15"
-
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
+	"go.uber.org/zap"
 )
 
 const (
@@ -62,10 +61,11 @@ type Daemon struct {
 	interval          time.Duration
 	lldpMessage       []byte
 	socket            int
+	log               *zap.SugaredLogger
 }
 
 // NewDaemon create a new LLDPD instance for the given interface
-func NewDaemon(systemName, systemDescription, interfaceName string, interval time.Duration) (*Daemon, error) {
+func NewDaemon(log *zap.SugaredLogger, systemName, systemDescription, interfaceName string, interval time.Duration) (*Daemon, error) {
 	// Open a raw socket on the specified interface, and configure it to accept
 	// traffic with etherecho's EtherType.
 	ifi, err := net.InterfaceByName(interfaceName)
@@ -73,13 +73,14 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 		return nil, fmt.Errorf("lldpd failed to find interface %q error: %w", interfaceName, err)
 	}
 
-	log.Info("lldpd", "listen on", ifi.Name)
+	log.Infow("lldpd", "listen on", ifi.Name)
 
 	l := &Daemon{
 		systemName:        systemName,
 		systemDescription: systemDescription,
 		ifi:               ifi,
 		interval:          interval,
+		log:               log,
 	}
 	err = l.bindTo(ethernet.Broadcast)
 	if err != nil {
@@ -97,7 +98,7 @@ func NewDaemon(systemName, systemDescription, interfaceName string, interval tim
 // Start spawn a goroutine which sends LLDP PDU's every interval given.
 func (l *Daemon) Start() {
 	go l.sendMessages()
-	log.Info("lldpd", "interface", l.ifi.Name, "interval", l.interval)
+	l.log.Infow("lldpd", "interface", l.ifi.Name, "interval", l.interval)
 }
 
 // create LLDPMessage as byte array
@@ -146,14 +147,14 @@ func (l *Daemon) sendMessages() {
 
 	b, err := f.MarshalBinary()
 	if err != nil {
-		log.Error("lldpd", "failed to marshal ethernet frame", err)
+		l.log.Errorw("lldpd", "failed to marshal ethernet frame", err)
 	}
 
 	// Send message forever.
 	t := time.NewTicker(l.interval)
 	for range t.C {
 		if err := l.writeTo(b); err != nil {
-			log.Error("lldpd", "failed to send message", err)
+			l.log.Errorw("lldpd", "failed to send message", err)
 		}
 	}
 }
