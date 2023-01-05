@@ -6,6 +6,7 @@ package lldp
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 // Client consumes lldp messages.
 type Client struct {
 	interfaceName string
-	source        *gopacket.PacketSource
+	iface         net.Interface
 	handle        *pcap.Handle
 	ctx           context.Context
 }
@@ -30,42 +31,57 @@ type DiscoveryResult struct {
 }
 
 // NewClient creates a new lldp client.
-func NewClient(ctx context.Context, iface net.Interface) (*Client, error) {
-	handle, err := pcap.OpenLive(iface.Name, 65536, true, 5*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", iface.Name, err)
-	}
-
-	// filter only lldp packages
-	bpfFilter := fmt.Sprintf("ether proto %#x", etherType)
-	err = handle.SetBPFFilter(bpfFilter)
-	if err != nil {
-		return nil, fmt.Errorf("unable to filter lldp ethernet traffic %#x on interface:%s %w", etherType, iface.Name, err)
-	}
-
-	src := gopacket.NewPacketSource(handle, handle.LinkType())
+func NewClient(ctx context.Context, iface net.Interface) *Client {
 	return &Client{
 		interfaceName: iface.Name,
-		source:        src,
-		handle:        handle,
+		iface:         iface,
 		ctx:           ctx,
-	}, nil
+	}
 }
 
 // Start searches on the configured interface for lldp packages and
 // pushes the optional TLV SysName and SysDescription fields of each
 // found lldp package into the given channel.
-func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult) {
+func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult) error {
 	defer func() {
 		log.Warnw("terminating lldp discovery for interface", "interface", l.interfaceName)
 		close(resultChan)
 		l.Close()
 	}()
 
+	var packetSource *gopacket.PacketSource
 	for {
+		// Recreate interface handle if not exists
+		if l.handle == nil {
+			var err error
+			l.handle, err = pcap.OpenLive(l.iface.Name, 65536, true, 5*time.Second)
+			if err != nil {
+				return fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", l.iface.Name, err)
+			}
+
+			// filter only lldp packages
+			bpfFilter := fmt.Sprintf("ether proto %#x", etherType)
+			err = l.handle.SetBPFFilter(bpfFilter)
+			if err != nil {
+				return fmt.Errorf("unable to filter lldp ethernet traffic %#x on interface:%s %w", etherType, l.iface.Name, err)
+			}
+
+			packetSource = gopacket.NewPacketSource(l.handle, l.handle.LinkType())
+		}
+
 		select {
 		default:
-			for packet := range l.source.Packets() {
+			for {
+				packet, err := packetSource.NextPacket()
+				if err == io.EOF {
+					l.handle.Close()
+					l.handle = nil
+					break
+				} else if err != nil {
+					log.Warnw("failed to decode next packet:", err)
+					continue
+				}
+
 				if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
 					continue
 				}
@@ -86,14 +102,17 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 					resultChan <- dr
 				}
 			}
+
 		case <-l.ctx.Done():
 			log.Debugw("context done, terminating lldp discovery")
-			return
+			return nil
 		}
 	}
 }
 
 // Close the LLDP client
 func (l *Client) Close() {
-	l.handle.Close()
+	if l.handle != nil {
+		l.handle.Close()
+	}
 }
