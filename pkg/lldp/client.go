@@ -17,9 +17,10 @@ import (
 
 // Client consumes lldp messages.
 type Client struct {
-	source *gopacket.PacketSource
-	handle *pcap.Handle
-	ctx    context.Context
+	interfaceName string
+	source        *gopacket.PacketSource
+	handle        *pcap.Handle
+	ctx           context.Context
 }
 
 // DiscoveryResult holds optional TLV SysName and SysDescription fields of a real lldp frame.
@@ -44,9 +45,10 @@ func NewClient(ctx context.Context, iface net.Interface) (*Client, error) {
 
 	src := gopacket.NewPacketSource(handle, handle.LinkType())
 	return &Client{
-		source: src,
-		handle: handle,
-		ctx:    ctx,
+		interfaceName: iface.Name,
+		source:        src,
+		handle:        handle,
+		ctx:           ctx,
 	}, nil
 }
 
@@ -55,6 +57,7 @@ func NewClient(ctx context.Context, iface net.Interface) (*Client, error) {
 // found lldp package into the given channel.
 func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult) {
 	defer func() {
+		log.Warnw("terminating lldp discovery for interface", "interface", l.interfaceName)
 		close(resultChan)
 		l.Close()
 	}()
