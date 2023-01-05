@@ -78,7 +78,6 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 					l.handle = nil
 					break
 				} else if err != nil {
-					log.Warnw("failed to decode next packet:", err)
 					continue
 				}
 
