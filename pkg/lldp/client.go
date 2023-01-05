@@ -69,7 +69,10 @@ func (l *Client) Start(resultChan chan<- DiscoveryResult) {
 					if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
 						continue
 					}
-					info := layer.(*layers.LinkLayerDiscoveryInfo)
+					info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
+					if !ok {
+						continue
+					}
 					dr := DiscoveryResult{
 						SysName:        info.SysName,
 						SysDescription: info.SysDescription,
