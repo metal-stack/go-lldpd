@@ -76,6 +76,7 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 				if err == io.EOF {
 					l.handle.Close()
 					l.handle = nil
+					log.Debugw("EOF error for the handle")
 					break
 				} else if err != nil {
 					continue
