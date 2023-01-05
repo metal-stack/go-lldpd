@@ -12,6 +12,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"go.uber.org/zap"
 )
 
 // Client consumes lldp messages.
@@ -52,7 +53,7 @@ func NewClient(ctx context.Context, iface net.Interface) (*Client, error) {
 // Start searches on the configured interface for lldp packages and
 // pushes the optional TLV SysName and SysDescription fields of each
 // found lldp package into the given channel.
-func (l *Client) Start(resultChan chan<- DiscoveryResult) {
+func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult) {
 	defer func() {
 		close(resultChan)
 		l.Close()
@@ -71,16 +72,19 @@ func (l *Client) Start(resultChan chan<- DiscoveryResult) {
 					}
 					info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
 					if !ok {
+						log.Warnw("packet is not LinkLayerDiscoveryInfo", "layer", layer)
 						continue
 					}
 					dr := DiscoveryResult{
 						SysName:        info.SysName,
 						SysDescription: info.SysDescription,
 					}
+					log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
 					resultChan <- dr
 				}
 			}
 		case <-l.ctx.Done():
+			log.Debugw("context done, terminating lldp discovery")
 			return
 		}
 	}
