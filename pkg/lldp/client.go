@@ -45,7 +45,6 @@ func NewClient(ctx context.Context, iface net.Interface) *Client {
 func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult) error {
 	defer func() {
 		log.Warnw("terminating lldp discovery for interface", "interface", l.interfaceName)
-		close(resultChan)
 		l.Close()
 	}()
 
