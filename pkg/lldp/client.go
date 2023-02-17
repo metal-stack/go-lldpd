@@ -98,7 +98,7 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 						SysName:        info.SysName,
 						SysDescription: info.SysDescription,
 					}
-					log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
+					// log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
 					resultChan <- dr
 				}
 			}
