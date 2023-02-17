@@ -1,6 +1,6 @@
 module github.com/metal-stack/go-lldpd
 
-go 1.19
+go 1.20
 
 require (
 	github.com/google/gopacket v1.1.19
@@ -10,7 +10,7 @@ require (
 	github.com/vishvananda/netlink v1.1.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/sys v0.5.0
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
