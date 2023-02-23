@@ -37,7 +37,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/metal-stack/go-lldpd/pkg/lldp"
 	"github.com/metal-stack/v"
