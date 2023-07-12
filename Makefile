@@ -25,6 +25,6 @@ release: all
 	cp bin/lldpd rel/usr/local/bin
 	cp lldpd.service rel/etc/systemd/system
 	cd rel \
-	&& tar -cvzf go-lldpd.tgz usr/local/bin/lldpd etc/systemd/system/lldpd.service \
+	&& tar --owner=root --group=root -cvzf go-lldpd.tgz usr/local/bin/lldpd etc/systemd/system/lldpd.service \
 	&& mv go-lldpd.tgz .. \
 	&& cd -
