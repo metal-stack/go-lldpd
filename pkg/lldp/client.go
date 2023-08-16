@@ -7,13 +7,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"go.uber.org/zap"
 )
 
 // Client consumes lldp messages.
@@ -42,9 +42,9 @@ func NewClient(ctx context.Context, iface net.Interface) *Client {
 // Start searches on the configured interface for lldp packages and
 // pushes the optional TLV SysName and SysDescription fields of each
 // found lldp package into the given channel.
-func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult) error {
+func (l *Client) Start(log *slog.Logger, resultChan chan<- DiscoveryResult) error {
 	defer func() {
-		log.Warnw("terminating lldp discovery for interface", "interface", l.interfaceName)
+		log.Warn("terminating lldp discovery for interface", "interface", l.interfaceName)
 		l.Close()
 	}()
 
@@ -75,7 +75,7 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 				if err == io.EOF {
 					l.handle.Close()
 					l.handle = nil
-					log.Debugw("EOF error for the handle")
+					log.Debug("EOF error for the handle")
 					break
 				} else if err != nil {
 					continue
@@ -90,7 +90,7 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 					}
 					info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
 					if !ok {
-						log.Warnw("packet is not LinkLayerDiscoveryInfo", "layer", layer)
+						log.Warn("packet is not LinkLayerDiscoveryInfo", "layer", layer)
 						continue
 					}
 					dr := DiscoveryResult{
@@ -103,7 +103,7 @@ func (l *Client) Start(log *zap.SugaredLogger, resultChan chan<- DiscoveryResult
 			}
 
 		case <-l.ctx.Done():
-			log.Debugw("context done, terminating lldp discovery")
+			log.Debug("context done, terminating lldp discovery")
 			return nil
 		}
 	}

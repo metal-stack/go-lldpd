@@ -29,14 +29,13 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"syscall"
 	"time"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
 
 	"github.com/metal-stack/go-lldpd/pkg/lldp"
@@ -59,17 +58,18 @@ const (
 
 // Starts lldp on every ethernet nic that is up
 func main() {
-	log := initLog(true)
-	log.Infow("lldpd", "version", v.V)
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{})
+	log := slog.New(jsonHandler)
+	log.Info("lldpd", "version", v.V)
 	b, err := os.ReadFile(installYaml)
 	if err != nil {
-		log.Errorw("lldpd", "unable to open config", err)
+		log.Error("lldpd", "unable to open config", err)
 		os.Exit(1)
 	}
 	i := &installerConfig{}
 	err = yaml.Unmarshal(b, &i)
 	if err != nil {
-		log.Errorw("lldpd", "unable to parse config", err)
+		log.Error("lldpd", "unable to parse config", err)
 		os.Exit(1)
 	}
 
@@ -83,22 +83,22 @@ func main() {
 			if nic.Attrs().OperState == netlink.OperUp {
 				interfaces = append(interfaces, name)
 			} else {
-				log.Infow("interface is not up, will ignore it", "interface", name)
+				log.Info("interface is not up, will ignore it", "interface", name)
 			}
 		}
 	}
 
 	if len(interfaces) < 2 {
-		log.Infow("exiting, because not enough interfaces are up - we need at least two")
+		log.Info("exiting, because not enough interfaces are up - we need at least two")
 		return
 	}
-	log.Infow("will start lldp on interfaces", "interfaces", interfaces)
+	log.Info("will start lldp on interfaces", "interfaces", interfaces)
 
 	desc := fmt.Sprintf("provisioned since %s", i.Timestamp)
 	for _, iface := range interfaces {
 		lldpd, err := lldp.NewDaemon(log, i.MachineUUID, desc, iface, 2*time.Second)
 		if err != nil {
-			log.Errorw("could not start lldp for interface", "interface", iface)
+			log.Error("could not start lldp for interface", "interface", iface)
 			os.Exit(-1)
 		}
 		lldpd.Start()
@@ -106,11 +106,11 @@ func main() {
 	select {}
 }
 
-func unmountDebugFs(log *zap.SugaredLogger) {
-	log.Infow("unmounting debugfs")
+func unmountDebugFs(log *slog.Logger) {
+	log.Info("unmounting debugfs")
 	err := syscall.Unmount(debugFs, syscall.MNT_FORCE)
 	if err != nil {
-		log.Errorw("unable to unmount debugfs", "error", err)
+		log.Error("unable to unmount debugfs", "error", err)
 	}
 }
 
@@ -119,19 +119,19 @@ func unmountDebugFs(log *zap.SugaredLogger) {
 // echo lldp stop > /sys/kernel/debug/i40e/0000:01:00.2/command
 // where <0000:01:00.2> is the pci address of the ethernet nic, this can be inspected by lspci,
 // or a loop over all directories in /sys/kernel/debug/i40e/*/command
-func stopFirmwareLLDP(log *zap.SugaredLogger) {
+func stopFirmwareLLDP(log *slog.Logger) {
 	var stat syscall.Statfs_t
 	err := syscall.Statfs(debugFs, &stat)
 	if err != nil {
-		log.Errorw("could not check whether debugfs is mounted", "error", err)
+		log.Error("could not check whether debugfs is mounted", "error", err)
 		return
 	}
 
 	if stat.Type != unix.DEBUGFS_MAGIC {
-		log.Infow("mounting debugfs")
+		log.Info("mounting debugfs")
 		err := syscall.Mount("debugfs", debugFs, "debugfs", 0, "")
 		if err != nil {
-			log.Errorw("mounting debugfs failed", "error", err)
+			log.Error("mounting debugfs failed", "error", err)
 			return
 		}
 		defer unmountDebugFs(log)
@@ -140,49 +140,30 @@ func stopFirmwareLLDP(log *zap.SugaredLogger) {
 	var buggyIntelNicDriverNames = []string{"i40e"}
 	for _, driver := range buggyIntelNicDriverNames {
 		debugFSPath := path.Join(debugFs, driver)
-		log.Infow("check whether lldp needs to be deactivated", "path", debugFSPath)
+		log.Info("check whether lldp needs to be deactivated", "path", debugFSPath)
 
 		if _, err := os.Stat(debugFSPath); os.IsNotExist(err) {
-			log.Infow("nothing to do here, because directory for driver does not exist", "path", debugFSPath)
+			log.Info("nothing to do here, because directory for driver does not exist", "path", debugFSPath)
 			continue
 		}
 
 		err := filepath.Walk(debugFSPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				log.Warnw("opening/reading debugfs failed", "path", path, "error", err)
+				log.Warn("opening/reading debugfs failed", "path", path, "error", err)
 				return err
 			}
 			if !info.IsDir() && info.Name() == "command" {
-				log.Infow("execute echo lldp stop > ", "path", path)
+				log.Info("execute echo lldp stop > ", "path", path)
 				stopCommand := []byte("lldp stop")
 				err := os.WriteFile(path, stopCommand, os.ModePerm)
 				if err != nil {
-					log.Errorw("stop lldp > command failed", "path", path, "error", err)
+					log.Error("stop lldp > command failed", "path", path, "error", err)
 				}
 			}
 			return nil
 		})
 		if err != nil {
-			log.Errorw("unable to walk through debugfs", "path", debugFSPath, "error", err)
+			log.Error("unable to walk through debugfs", "path", debugFSPath, "error", err)
 		}
 	}
-}
-
-func initLog(d bool) *zap.SugaredLogger {
-	pe := zap.NewProductionEncoderConfig()
-	pe.EncodeLevel = zapcore.LowercaseColorLevelEncoder
-	pe.EncodeTime = zapcore.ISO8601TimeEncoder
-	consoleEncoder := zapcore.NewConsoleEncoder(pe)
-
-	level := zap.InfoLevel
-	if d {
-		level = zap.DebugLevel
-	}
-
-	core := zapcore.NewTee(
-		zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), level),
-	)
-
-	l := zap.New(core)
-	return l.Sugar()
 }

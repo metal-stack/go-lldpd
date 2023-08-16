@@ -31,9 +31,10 @@ import (
 	"syscall"
 	"time"
 
+	"log/slog"
+
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
-	"go.uber.org/zap"
 )
 
 const (
@@ -61,11 +62,11 @@ type Daemon struct {
 	interval          time.Duration
 	lldpMessage       []byte
 	socket            int
-	log               *zap.SugaredLogger
+	log               *slog.Logger
 }
 
 // NewDaemon create a new LLDPD instance for the given interface
-func NewDaemon(log *zap.SugaredLogger, systemName, systemDescription, interfaceName string, interval time.Duration) (*Daemon, error) {
+func NewDaemon(log *slog.Logger, systemName, systemDescription, interfaceName string, interval time.Duration) (*Daemon, error) {
 	// Open a raw socket on the specified interface, and configure it to accept
 	// traffic with etherecho's EtherType.
 	ifi, err := net.InterfaceByName(interfaceName)
@@ -73,7 +74,7 @@ func NewDaemon(log *zap.SugaredLogger, systemName, systemDescription, interfaceN
 		return nil, fmt.Errorf("lldpd failed to find interface %q error: %w", interfaceName, err)
 	}
 
-	log.Infow("lldpd", "listen on", ifi.Name)
+	log.Info("lldpd", "listen on", ifi.Name)
 
 	l := &Daemon{
 		systemName:        systemName,
@@ -98,7 +99,7 @@ func NewDaemon(log *zap.SugaredLogger, systemName, systemDescription, interfaceN
 // Start spawn a goroutine which sends LLDP PDU's every interval given.
 func (l *Daemon) Start() {
 	go l.sendMessages()
-	l.log.Infow("lldpd", "interface", l.ifi.Name, "interval", l.interval)
+	l.log.Info("lldpd", "interface", l.ifi.Name, "interval", l.interval)
 }
 
 // create LLDPMessage as byte array
@@ -147,14 +148,14 @@ func (l *Daemon) sendMessages() {
 
 	b, err := f.MarshalBinary()
 	if err != nil {
-		l.log.Errorw("lldpd", "failed to marshal ethernet frame", err)
+		l.log.Error("lldpd", "failed to marshal ethernet frame", err)
 	}
 
 	// Send message forever.
 	t := time.NewTicker(l.interval)
 	for range t.C {
 		if err := l.writeTo(b); err != nil {
-			l.log.Errorw("lldpd", "failed to send message", err)
+			l.log.Error("lldpd", "failed to send message", err)
 		}
 	}
 }
