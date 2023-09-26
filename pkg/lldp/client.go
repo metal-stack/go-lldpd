@@ -6,7 +6,6 @@ package lldp
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"time"
@@ -67,39 +66,33 @@ func (l *Client) Start(log *slog.Logger, resultChan chan<- DiscoveryResult) erro
 		}
 
 		select {
-		default:
-			for {
-				packet, err := packetSource.NextPacket()
-				if err == io.EOF {
-					l.handle.Close()
-					l.handle = nil
-					log.Debug("EOF error for the handle")
-					break
-				} else if err != nil {
-					continue
-				}
-
-				if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
-					continue
-				}
-				for _, layer := range packet.Layers() {
-					if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
-						continue
-					}
-					info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
-					if !ok {
-						log.Warn("packet is not LinkLayerDiscoveryInfo", "layer", layer)
-						continue
-					}
-					dr := DiscoveryResult{
-						SysName:        info.SysName,
-						SysDescription: info.SysDescription,
-					}
-					// log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
-					resultChan <- dr
-				}
+		case packet, ok := <-packetSource.Packets():
+			if !ok {
+				l.handle.Close()
+				l.handle = nil
+				log.Debug("EOF error for the handle")
+				continue
 			}
 
+			if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
+				continue
+			}
+			for _, layer := range packet.Layers() {
+				if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
+					continue
+				}
+				info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
+				if !ok {
+					log.Warn("packet is not LinkLayerDiscoveryInfo", "layer", layer)
+					continue
+				}
+				dr := DiscoveryResult{
+					SysName:        info.SysName,
+					SysDescription: info.SysDescription,
+				}
+				// log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
+				resultChan <- dr
+			}
 		case <-l.ctx.Done():
 			log.Debug("context done, terminating lldp discovery")
 			return nil
