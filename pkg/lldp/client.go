@@ -19,7 +19,6 @@ import (
 // Client consumes lldp messages.
 type Client struct {
 	interfaceName string
-	iface         net.Interface
 	handle        *pcap.Handle
 	ctx           context.Context
 }
@@ -34,7 +33,6 @@ type DiscoveryResult struct {
 func NewClient(ctx context.Context, iface net.Interface) *Client {
 	return &Client{
 		interfaceName: iface.Name,
-		iface:         iface,
 		ctx:           ctx,
 	}
 }
@@ -53,16 +51,16 @@ func (l *Client) Start(log *slog.Logger, resultChan chan<- DiscoveryResult) erro
 		// Recreate interface handle if not exists
 		if l.handle == nil {
 			var err error
-			l.handle, err = pcap.OpenLive(l.iface.Name, 65536, true, 5*time.Second)
+			l.handle, err = pcap.OpenLive(l.interfaceName, 65536, true, 5*time.Second)
 			if err != nil {
-				return fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", l.iface.Name, err)
+				return fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", l.interfaceName, err)
 			}
 
 			// filter only lldp packages
 			bpfFilter := fmt.Sprintf("ether proto %#x", etherType)
 			err = l.handle.SetBPFFilter(bpfFilter)
 			if err != nil {
-				return fmt.Errorf("unable to filter lldp ethernet traffic %#x on interface:%s %w", etherType, l.iface.Name, err)
+				return fmt.Errorf("unable to filter lldp ethernet traffic %#x on interface:%s %w", etherType, l.interfaceName, err)
 			}
 
 			packetSource = gopacket.NewPacketSource(l.handle, l.handle.LinkType())
