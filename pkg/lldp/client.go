@@ -90,7 +90,6 @@ func (l *Client) Start(log *slog.Logger, resultChan chan<- DiscoveryResult) erro
 					SysName:        info.SysName,
 					SysDescription: info.SysDescription,
 				}
-				// log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
 				resultChan <- dr
 			}
 		case <-l.ctx.Done():
