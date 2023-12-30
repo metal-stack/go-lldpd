@@ -6,7 +6,6 @@ package lldp
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"time"
@@ -19,7 +18,6 @@ import (
 // Client consumes lldp messages.
 type Client struct {
 	interfaceName string
-	iface         net.Interface
 	handle        *pcap.Handle
 	ctx           context.Context
 }
@@ -34,7 +32,6 @@ type DiscoveryResult struct {
 func NewClient(ctx context.Context, iface net.Interface) *Client {
 	return &Client{
 		interfaceName: iface.Name,
-		iface:         iface,
 		ctx:           ctx,
 	}
 }
@@ -53,55 +50,48 @@ func (l *Client) Start(log *slog.Logger, resultChan chan<- DiscoveryResult) erro
 		// Recreate interface handle if not exists
 		if l.handle == nil {
 			var err error
-			l.handle, err = pcap.OpenLive(l.iface.Name, 65536, true, 5*time.Second)
+			l.handle, err = pcap.OpenLive(l.interfaceName, 65536, true, 5*time.Second)
 			if err != nil {
-				return fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", l.iface.Name, err)
+				return fmt.Errorf("unable to open interface:%s in promiscuous mode: %w", l.interfaceName, err)
 			}
 
 			// filter only lldp packages
 			bpfFilter := fmt.Sprintf("ether proto %#x", etherType)
 			err = l.handle.SetBPFFilter(bpfFilter)
 			if err != nil {
-				return fmt.Errorf("unable to filter lldp ethernet traffic %#x on interface:%s %w", etherType, l.iface.Name, err)
+				return fmt.Errorf("unable to filter lldp ethernet traffic %#x on interface:%s %w", etherType, l.interfaceName, err)
 			}
 
 			packetSource = gopacket.NewPacketSource(l.handle, l.handle.LinkType())
 		}
 
 		select {
-		default:
-			for {
-				packet, err := packetSource.NextPacket()
-				if err == io.EOF {
-					l.handle.Close()
-					l.handle = nil
-					log.Debug("EOF error for the handle")
-					break
-				} else if err != nil {
-					continue
-				}
-
-				if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
-					continue
-				}
-				for _, layer := range packet.Layers() {
-					if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
-						continue
-					}
-					info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
-					if !ok {
-						log.Warn("packet is not LinkLayerDiscoveryInfo", "layer", layer)
-						continue
-					}
-					dr := DiscoveryResult{
-						SysName:        info.SysName,
-						SysDescription: info.SysDescription,
-					}
-					// log.Debugw("received LinkLayerDiscoveryInfo", "result", dr)
-					resultChan <- dr
-				}
+		case packet, ok := <-packetSource.Packets():
+			if !ok {
+				l.handle.Close()
+				l.handle = nil
+				log.Debug("EOF error for the handle")
+				continue
 			}
 
+			if packet.LinkLayer().LayerType() != layers.LayerTypeEthernet {
+				continue
+			}
+			for _, layer := range packet.Layers() {
+				if layer.LayerType() != layers.LayerTypeLinkLayerDiscoveryInfo {
+					continue
+				}
+				info, ok := layer.(*layers.LinkLayerDiscoveryInfo)
+				if !ok {
+					log.Warn("packet is not LinkLayerDiscoveryInfo", "layer", layer)
+					continue
+				}
+				dr := DiscoveryResult{
+					SysName:        info.SysName,
+					SysDescription: info.SysDescription,
+				}
+				resultChan <- dr
+			}
 		case <-l.ctx.Done():
 			log.Debug("context done, terminating lldp discovery")
 			return nil
