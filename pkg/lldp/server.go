@@ -99,7 +99,7 @@ func NewDaemon(log *slog.Logger, systemName, systemDescription, interfaceName st
 // Start spawn a goroutine which sends LLDP PDU's every interval given.
 func (l *Daemon) Start() {
 	go l.sendMessages()
-	l.log.Info("lldpd", "interface", l.ifi.Name, "interval", l.interval)
+	l.log.Info("lldpd", "interface", l.ifi.Name, "interval", l.interval.String())
 }
 
 // create LLDPMessage as byte array
