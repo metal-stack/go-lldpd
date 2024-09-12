@@ -114,7 +114,7 @@ func unmountDebugFs(log *slog.Logger) {
 	}
 }
 
-// stopFirmwareLLDP stop Firmeware LLDP not persistent over reboots, only during runtime.
+// stopFirmwareLLDP stop Firmware LLDP not persistent over reboots, only during runtime.
 // mount -t debugfs none /sys/kernel/debug
 // echo lldp stop > /sys/kernel/debug/i40e/0000:01:00.2/command
 // where <0000:01:00.2> is the pci address of the ethernet nic, this can be inspected by lspci,
@@ -155,7 +155,7 @@ func stopFirmwareLLDP(log *slog.Logger) {
 			if !info.IsDir() && info.Name() == "command" {
 				log.Info("execute echo lldp stop > ", "path", path)
 				stopCommand := []byte("lldp stop")
-				err := os.WriteFile(path, stopCommand, os.ModePerm)
+				err := os.WriteFile(path, stopCommand, os.ModePerm) // nolint:gosec
 				if err != nil {
 					log.Error("stop lldp > command failed", "path", path, "error", err)
 				}
