@@ -118,17 +118,17 @@ func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 			{
 				Type:   lldp.TLVTypePortDescription,
 				Value:  []byte(lldpd.ifi.Name),
-				Length: uint16(len(lldpd.ifi.Name)),
+				Length: uint16(len(lldpd.ifi.Name)), // nolint:gosec
 			},
 			{
 				Type:   lldp.TLVTypeSystemName,
 				Value:  []byte(lldpd.systemName),
-				Length: uint16(len(lldpd.systemName)),
+				Length: uint16(len(lldpd.systemName)), // nolint:gosec
 			},
 			{
 				Type:   lldp.TLVTypeSystemDescription,
 				Value:  []byte(lldpd.systemDescription),
-				Length: uint16(len(lldpd.systemDescription)),
+				Length: uint16(len(lldpd.systemDescription)), // nolint:gosec
 			},
 		},
 	}
@@ -184,7 +184,7 @@ func (l *Daemon) bindTo(address net.HardwareAddr) error {
 	addr := syscall.SockaddrLinklayer{
 		Protocol: htons(etherType),
 		Ifindex:  l.ifi.Index,
-		Halen:    uint8(len(address)),
+		Halen:    uint8(len(address)), // nolint:gosec
 		Addr:     baddr,
 	}
 
