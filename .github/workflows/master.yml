@@ -44,26 +44,27 @@ jobs:
           make release
         if: ${{ github.event_name == 'release' }}
 
+      - name: Generate SBOM for lldpd binary
+        uses: anchore/sbom-action@v0
+        env:
+          SBOM_NAME: sbom.json
+        with:
+          file: ./bin/lldpd
+          format: spdx-json
+          artifact-name: ${{ env.SBOM_NAME }}
+          output-file: ./${{ env.SBOM_NAME }}
+
       - uses: release-drafter/release-drafter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: ${{ github.event_name == 'push' }}
 
-      - name: Get release
-        id: get_release
-        uses: bruceadams/get-release@v1.3.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: ${{ github.event_name == 'release' }}
-
       - name: Upload Release Asset
         id: upload-release-asset
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: ./go-lldpd.tgz
-          asset_name: go-lldpd.tgz
-          asset_content_type: application/tar+gzip
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            go-lldpd.tgz
+            sbom.json
         if: ${{ github.event_name == 'release' }}
