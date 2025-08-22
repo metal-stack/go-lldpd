@@ -4,16 +4,20 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
+  release:
+    types:
+      - published
 
 jobs:
-
   build:
- 
     runs-on: ubuntu-latest
- 
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v5
 
       - name: Set up Go 1.24
         uses: actions/setup-go@v5
@@ -28,10 +32,37 @@ jobs:
         with:
           args: -p bugs -p unused
 
+      - name: Make tag
+        run: |
+          [ "${GITHUB_EVENT_NAME}" == 'pull_request' ] && echo "TAG_NAME=$(echo $GITHUB_REF | awk -F / '{print $3}')-${GITHUB_HEAD_REF##*/}" >> $GITHUB_ENV || true
+          [ "${GITHUB_EVENT_NAME}" == 'release' ] && echo "TAG_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV || true
+          [ "${GITHUB_EVENT_NAME}" == 'push' ] && echo "TAG_NAME=latest" >> $GITHUB_ENV || true
+
       - name: Build project
         run: |
           make
 
-      - uses: release-drafter/release-drafter@v6
+      - name: Generate SBOM for lldpd binary
+        uses: anchore/sbom-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SBOM_NAME: sbom.json
+        with:
+          file: ./bin/lldpd
+          format: spdx-json
+          artifact-name: ${{ env.SBOM_NAME }}
+          output-file: ./${{ env.SBOM_NAME }}
+
+      - name: Prepare release
+        run: |
+          make release
+        if: ${{ github.event_name == 'release' }}
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            go-lldpd.tgz
+            sbom.json
+        if: ${{ github.event_name == 'release' }}
