@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go 1.24
         uses: actions/setup-go@v5
@@ -31,18 +31,16 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           args: -p bugs -p unused
-        if: ${{ github.event_name != 'release' }}
+
+      - name: Make tag
+        run: |
+          [ "${GITHUB_EVENT_NAME}" == 'pull_request' ] && echo "TAG_NAME=$(echo $GITHUB_REF | awk -F / '{print $3}')-${GITHUB_HEAD_REF##*/}" >> $GITHUB_ENV || true
+          [ "${GITHUB_EVENT_NAME}" == 'release' ] && echo "TAG_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV || true
+          [ "${GITHUB_EVENT_NAME}" == 'push' ] && echo "TAG_NAME=latest" >> $GITHUB_ENV || true
 
       - name: Build project
         run: |
           make
-        if: ${{ github.event_name != 'release' }}
-
-      - name: Build project
-        run: |
-          export GITHUB_TAG_NAME=${GITHUB_REF##*/}
-          make release
-        if: ${{ github.event_name == 'release' }}
 
       - name: Generate SBOM for lldpd binary
         uses: anchore/sbom-action@v0
@@ -54,10 +52,10 @@ jobs:
           artifact-name: ${{ env.SBOM_NAME }}
           output-file: ./${{ env.SBOM_NAME }}
 
-      - uses: release-drafter/release-drafter@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: ${{ github.event_name == 'push' }}
+      - name: Prepare release
+        run: |
+          make release
+        if: ${{ github.event_name == 'release' }}
 
       - name: Upload Release Asset
         id: upload-release-asset
