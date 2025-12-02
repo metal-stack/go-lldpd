@@ -8,7 +8,7 @@ require (
 	github.com/mdlayher/lldp v0.0.0-20150915211757-afd9f83164c5
 	github.com/metal-stack/v v1.0.3
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/sys v0.35.0
+	golang.org/x/sys v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

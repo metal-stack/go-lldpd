@@ -1,5 +1,4 @@
 //go:build client
-// +build client
 
 package lldp
 

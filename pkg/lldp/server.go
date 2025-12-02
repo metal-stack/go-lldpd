@@ -33,7 +33,6 @@ import (
 
 	"log/slog"
 
-	"github.com/google/gopacket/layers"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/lldp"
 )
@@ -41,7 +40,7 @@ import (
 const (
 	// Make use of an LLDP EtherType.
 	// https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml
-	etherType = layers.EthernetTypeLinkLayerDiscovery
+	etherType = 0x88cc
 
 	// TC_PRIO_CONTROL is required to be set as socket option,
 	// otherwise newer intel nics will not forward packets from this socket
@@ -143,7 +142,7 @@ func (l *Daemon) sendMessages() {
 	f := &ethernet.Frame{
 		Destination: destinationMac,
 		Source:      l.ifi.HardwareAddr,
-		EtherType:   ethernet.EtherType(etherType),
+		EtherType:   etherType,
 		Payload:     l.lldpMessage,
 	}
 
@@ -183,7 +182,7 @@ func (l *Daemon) bindTo(address net.HardwareAddr) error {
 	var baddr [8]byte
 	copy(baddr[:], address)
 	addr := syscall.SockaddrLinklayer{
-		Protocol: htons(uint16(etherType)),
+		Protocol: htons(etherType),
 		Ifindex:  l.ifi.Index,
 		Halen:    uint8(len(address)), // nolint:gosec
 		Addr:     baddr,
