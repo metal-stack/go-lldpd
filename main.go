@@ -88,10 +88,6 @@ func main() {
 		}
 	}
 
-	if len(interfaces) < 2 {
-		log.Info("exiting, because not enough interfaces are up - we need at least two")
-		return
-	}
 	log.Info("will start lldp on interfaces", "interfaces", interfaces)
 
 	desc := fmt.Sprintf("provisioned since %s", i.Timestamp)
