@@ -10,6 +10,16 @@ timestamp: 2006-01-02T15:04:05Z07:00
 ```
 
 The config file location cannot be modified.
-go-lldpd also expects 2 distinct uplinks to the switch, otherwise it will die.
+By default go-lldpd expects at least 2 ethernet interfaces to be up (one per leaf switch), otherwise it exits.
+The minimum can be lowered for setups with a single leaf switch, e.g. a hardware lab:
+
+```bash
+lldpd -min-interfaces 1
+# or, e.g. in a systemd drop-in /etc/systemd/system/lldpd.service.d/min-interfaces.conf:
+# [Service]
+# Environment=LLDPD_MIN_INTERFACES=1
+```
+
+The flag takes precedence over the environment variable. Production machines should keep the default.
 
 Example systemd service is also bundled.
