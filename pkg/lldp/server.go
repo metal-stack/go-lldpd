@@ -60,13 +60,36 @@ type Daemon struct {
 	systemDescription string
 	ifi               *net.Interface
 	interval          time.Duration
+	portIDSubtype     PortIDSubtype
 	lldpMessage       []byte
 	socket            int
 	log               *slog.Logger
 }
 
+// PortIDSubtype selects the port ID TLV subtype (IEEE 802.1AB 8.5.3.2).
+type PortIDSubtype uint8
+
+const (
+	// PortIDSubtypeInterfaceName sends the interface name (subtype 5), the default.
+	PortIDSubtypeInterfaceName PortIDSubtype = PortIDSubtype(lldp.PortIDSubtypeInterfaceName)
+	// PortIDSubtypeMACAddress sends the interface's MAC address (subtype 3).
+	PortIDSubtypeMACAddress PortIDSubtype = PortIDSubtype(lldp.PortIDSubtypeMACAddress)
+	// PortIDSubtypeLocal sends the interface name as locally assigned port ID
+	// (subtype 7), as switch LLDP agents announce it for metal-hammer.
+	PortIDSubtypeLocal PortIDSubtype = PortIDSubtype(lldp.PortIDSubtypeLocallyAssigned)
+)
+
+// Option configures a Daemon.
+type Option func(*Daemon)
+
+// WithPortIDSubtype sets the port ID subtype. metal-hammer only accepts
+// switch neighbors whose port ID is a MAC address or locally assigned.
+func WithPortIDSubtype(s PortIDSubtype) Option {
+	return func(d *Daemon) { d.portIDSubtype = s }
+}
+
 // NewDaemon create a new LLDPD instance for the given interface
-func NewDaemon(log *slog.Logger, systemName, systemDescription, interfaceName string, interval time.Duration) (*Daemon, error) {
+func NewDaemon(log *slog.Logger, systemName, systemDescription, interfaceName string, interval time.Duration, opts ...Option) (*Daemon, error) {
 	// Open a raw socket on the specified interface, and configure it to accept
 	// traffic with etherecho's EtherType.
 	ifi, err := net.InterfaceByName(interfaceName)
@@ -81,7 +104,11 @@ func NewDaemon(log *slog.Logger, systemName, systemDescription, interfaceName st
 		systemDescription: systemDescription,
 		ifi:               ifi,
 		interval:          interval,
+		portIDSubtype:     PortIDSubtypeInterfaceName,
 		log:               log,
+	}
+	for _, opt := range opts {
+		opt(l)
 	}
 	err = l.bindTo(ethernet.Broadcast)
 	if err != nil {
@@ -109,11 +136,8 @@ func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 			Subtype: lldp.ChassisIDSubtypeMACAddress,
 			ID:      []byte(lldpd.ifi.HardwareAddr),
 		},
-		PortID: &lldp.PortID{
-			Subtype: lldp.PortIDSubtypeInterfaceName,
-			ID:      []byte(lldpd.ifi.Name),
-		},
-		TTL: 2 * lldpd.interval,
+		PortID: portID(lldpd),
+		TTL:    2 * lldpd.interval,
 		Optional: []*lldp.TLV{
 			{
 				Type:   lldp.TLVTypePortDescription,
@@ -133,6 +157,18 @@ func createLLDPMessage(lldpd *Daemon) ([]byte, error) {
 		},
 	}
 	return lf.MarshalBinary()
+}
+
+// portID returns the port ID TLV for the daemon's subtype.
+func portID(lldpd *Daemon) *lldp.PortID {
+	switch lldpd.portIDSubtype {
+	case PortIDSubtypeMACAddress:
+		return &lldp.PortID{Subtype: lldp.PortIDSubtypeMACAddress, ID: []byte(lldpd.ifi.HardwareAddr)}
+	case PortIDSubtypeLocal:
+		return &lldp.PortID{Subtype: lldp.PortIDSubtypeLocallyAssigned, ID: []byte(lldpd.ifi.Name)}
+	default:
+		return &lldp.PortID{Subtype: lldp.PortIDSubtypeInterfaceName, ID: []byte(lldpd.ifi.Name)}
+	}
 }
 
 // sendMessages continuously sends a message over a connection at regular intervals,
