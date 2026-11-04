@@ -28,11 +28,13 @@ SOFTWARE.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -54,6 +56,11 @@ type installerConfig struct {
 const (
 	debugFs     = "/sys/kernel/debug"
 	installYaml = "/etc/metal/install.yaml"
+
+	// defaultMinInterfaces is the production requirement: every machine is dual-homed to two leaf switches.
+	defaultMinInterfaces = 2
+	// minInterfacesEnv overrides the default, e.g. from a systemd drop-in in single-switch lab setups.
+	minInterfacesEnv = "LLDPD_MIN_INTERFACES"
 )
 
 // Starts lldp on every ethernet nic that is up
@@ -61,6 +68,11 @@ func main() {
 	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{})
 	log := slog.New(jsonHandler)
 	log.Info("lldpd", "version", v.V)
+	minInterfaces, err := parseMinInterfaces(os.Args[1:], os.Getenv)
+	if err != nil {
+		log.Error("lldpd", "invalid arguments", err)
+		os.Exit(2)
+	}
 	b, err := os.ReadFile(installYaml)
 	if err != nil {
 		log.Error("lldpd", "unable to open config", err)
@@ -75,21 +87,14 @@ func main() {
 
 	stopFirmwareLLDP(log)
 
-	var interfaces []string
 	links, _ := netlink.LinkList()
-	for _, nic := range links {
-		if nic.Type() == "device" && nic.Attrs().EncapType == "ether" {
-			name := nic.Attrs().Name
-			if nic.Attrs().OperState == netlink.OperUp {
-				interfaces = append(interfaces, name)
-			} else {
-				log.Info("interface is not up, will ignore it", "interface", name)
-			}
-		}
+	interfaces, down := upEthernetInterfaces(links)
+	for _, name := range down {
+		log.Info("interface is not up, will ignore it", "interface", name)
 	}
 
-	if len(interfaces) < 2 {
-		log.Info("exiting, because not enough interfaces are up - we need at least two")
+	if len(interfaces) < minInterfaces {
+		log.Info("exiting, because not enough interfaces are up", "up", len(interfaces), "minimum", minInterfaces)
 		return
 	}
 	log.Info("will start lldp on interfaces", "interfaces", interfaces)
@@ -104,6 +109,46 @@ func main() {
 		lldpd.Start()
 	}
 	select {}
+}
+
+// parseMinInterfaces returns the minimum number of interfaces that must be up.
+// Precedence: flag -min-interfaces, then environment variable LLDPD_MIN_INTERFACES, then 2.
+func parseMinInterfaces(args []string, getenv func(string) string) (int, error) {
+	def := defaultMinInterfaces
+	if env := getenv(minInterfacesEnv); env != "" {
+		n, err := strconv.Atoi(env)
+		if err != nil {
+			return 0, fmt.Errorf("%s=%q is not a number", minInterfacesEnv, env)
+		}
+		def = n
+	}
+	fs := flag.NewFlagSet("lldpd", flag.ContinueOnError)
+	n := fs.Int("min-interfaces", def, "minimum number of ethernet interfaces that must be up, otherwise lldpd exits (env "+minInterfacesEnv+")")
+	if err := fs.Parse(args); err != nil {
+		return 0, err
+	}
+	if fs.NArg() > 0 {
+		return 0, fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+	if *n < 1 {
+		return 0, fmt.Errorf("minimum number of interfaces must be at least 1, got %d", *n)
+	}
+	return *n, nil
+}
+
+// upEthernetInterfaces returns the names of physical ethernet devices that are up, and of those that are not.
+func upEthernetInterfaces(links []netlink.Link) (up, down []string) {
+	for _, nic := range links {
+		if nic.Type() != "device" || nic.Attrs().EncapType != "ether" {
+			continue
+		}
+		if nic.Attrs().OperState == netlink.OperUp {
+			up = append(up, nic.Attrs().Name)
+		} else {
+			down = append(down, nic.Attrs().Name)
+		}
+	}
+	return up, down
 }
 
 func unmountDebugFs(log *slog.Logger) {
